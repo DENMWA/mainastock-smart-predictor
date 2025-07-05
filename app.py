@@ -4,7 +4,7 @@ import pandas as pd
 import requests
 import csv
 from datetime import datetime
-import matplotlib.pyplot as plt
+import plotly.graph_objs as go
 import streamlit as st
 
 st.title("MainaStock Smart - Stock Prediction & Investment System")
@@ -116,19 +116,51 @@ if aud_to_usd:
     st.subheader("Ranked Assets")
     st.write(pd.DataFrame(ranked_assets, columns=['Ticker', 'Score']))
 
-    # Step 8: Visualize Top Stocks' Performance
-    st.subheader("Top 3 Ranked Stocks - Historical Closing Prices & Cumulative Returns")
-    top_assets = [ticker for ticker, _ in ranked_assets[:3]]
-    plt.figure(figsize=(12, 8))
+    # Sidebar - Weekly Top 3 Picks & Investment Strategy
+    st.sidebar.markdown("## 📈 Weekly Top 3 Picks")
+    top_3 = ranked_assets[:3]
+    top_3_df = pd.DataFrame(top_3, columns=['Ticker', 'Score'])
+    top_3_df['Suggested Investment (USD)'] = [round(score / total_score * usd_capital, 2) for _, score in top_3]
+    st.sidebar.dataframe(top_3_df)
+
+    st.sidebar.info("These are this week’s top-performing stocks by predictive score. Suggested investment split is weighted by performance.")
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("## 🧠 Investment Strategy Advisor")
+    st.sidebar.markdown("Choose a strategy to adjust your focus below:")
+    strategy = st.sidebar.selectbox("Select your investment strategy:",
+                                    ["Max Growth Potential", "Balanced Risk-Return"])
+    if strategy == "Max Growth Potential":
+        st.sidebar.info("Prioritize aggressive growth with high momentum & Sharpe ratio.")
+    elif strategy == "Balanced Risk-Return":
+        st.sidebar.info("Focus on stable returns with lower volatility.")
+
+    # Step 8: Select & Visualize Stocks
+    search_options = [ticker for ticker, _ in ranked_assets]
+    select_all = st.checkbox("Select all stocks")
+    if select_all:
+        selected_tickers = search_options
+    else:
+        selected_tickers = st.multiselect("Select top stocks to visualize:", options=search_options, default=search_options[:3])
+
+    top_assets = selected_tickers
+
+    fig = go.Figure()
     for ticker in top_assets:
         prices = stock_data[ticker]['Close']
         returns = prices.pct_change().fillna(0).cumsum() * 100
-        plt.plot(stock_data[ticker].index, prices, label=f"{ticker} ({assets[ticker]}) - Price")
-        plt.plot(stock_data[ticker].index, returns, linestyle='--', label=f"{ticker} ({assets[ticker]}) - Cumulative Return (%)")
-    plt.title("Top 3 Ranked Stocks - Historical Closing Prices & Cumulative Returns")
-    plt.xlabel("Date")
-    plt.ylabel("Price (USD) & Return (%)")
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    st.pyplot(plt)
+        fig.add_trace(go.Scatter(x=stock_data[ticker].index, y=prices,
+                                 mode='lines', name=f'{ticker} ({assets[ticker]}) - Price',
+                                 line=dict(width=2)))
+        fig.add_trace(go.Scatter(x=stock_data[ticker].index, y=returns,
+                                 mode='lines', name=f'{ticker} ({assets[ticker]}) - Cumulative Return (%)',
+                                 line=dict(width=2, dash='dot')))
+    fig.update_layout(title='📊 Selected Stocks - Historical Closing Prices & Cumulative Returns',
+                      xaxis_title='📅 Date',
+                      yaxis_title='💰 Price (USD) & Return (%)',
+                      hovermode='x unified',
+                      plot_bgcolor='rgba(0,0,0,0)',
+                      paper_bgcolor='rgba(245,245,245,1)',
+                      legend_title_text='Legend')
+
+    st.plotly_chart(fig)
